@@ -3,3 +3,4 @@ python-dotenv
 openai
 fastapi
 sentence-transformers
+uvicorn
