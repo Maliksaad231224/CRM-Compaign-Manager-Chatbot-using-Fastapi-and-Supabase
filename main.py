@@ -23,34 +23,84 @@ key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 table_name = "term_deposit_campaigns"
 
-rows = supabase.table(table_name).select("*").execute().data
+# Load sentence transformer model
 model = SentenceTransformer("all-MiniLM-L6-v2")
-print('model loaded')
-embeddings = []
-row_data = []
+print('✅ Model loaded successfully')
 
-for row in rows:
-    emb_str = row.get("embedding_vector")  # your column name
-    if emb_str:
-        # Convert string to list
-        emb_list = ast.literal_eval(emb_str)
-        embeddings.append(np.array(emb_list, dtype=np.float32))
-        row_data.append(row)
-
-# Now stack into a matrix
-embeddings = np.vstack(embeddings)
-print(embeddings.shape)
-
-def cosine_similarity(a, b):
-    a_norm = a / np.linalg.norm(a, axis=1, keepdims=True)
-    b_norm = b / np.linalg.norm(b)
-    return np.dot(a_norm, b_norm)
 def query_rag(query, top_k=10):
-    query_emb = model.encode(query)
-    sims = cosine_similarity(embeddings, query_emb)  # shape: (num_rows,)
-    top_idx = np.argsort(sims)[-top_k:][::-1]  # indices of top-k similar rows
-    results = [row_data[i] for i in top_idx]
-    return results
+    """
+    Query RAG using Supabase vector similarity search
+    """
+    try:
+        # Generate embedding for the query
+        query_embedding = model.encode(query).tolist()
+        
+        # Try using Supabase's RPC function first
+        try:
+            response = supabase.rpc(
+                'match_documents',
+                {
+                    'query_embedding': query_embedding,
+                    'match_count': top_k
+                }
+            ).execute()
+            
+            if response.data:
+                return response.data
+        except Exception as rpc_error:
+            print(f"RPC function not available, using fallback method: {rpc_error}")
+        
+        # Fallback: Fetch all records and do similarity search manually
+        all_rows = supabase.table(table_name).select("*").execute().data
+        
+        if not all_rows:
+            print("⚠️ No data found in table")
+            return []
+        
+        embeddings = []
+        row_data = []
+        
+        for row in all_rows:
+            emb_str = row.get("embedding_vector")
+            if emb_str:
+                try:
+                    # Handle both string and list formats
+                    if isinstance(emb_str, str):
+                        emb_list = ast.literal_eval(emb_str)
+                    else:
+                        emb_list = emb_str
+                    
+                    embeddings.append(np.array(emb_list, dtype=np.float32))
+                    row_data.append(row)
+                except Exception as e:
+                    print(f"Error parsing embedding for row: {e}")
+                    continue
+        
+        if len(embeddings) == 0:
+            print("⚠️ No valid embeddings found")
+            return []
+        
+        # Calculate cosine similarity
+        embeddings_matrix = np.vstack(embeddings)
+        query_emb = np.array(query_embedding, dtype=np.float32)
+        
+        # Normalize and compute similarity
+        embeddings_norm = embeddings_matrix / np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
+        query_norm = query_emb / np.linalg.norm(query_emb)
+        similarities = np.dot(embeddings_norm, query_norm)
+        
+        # Get top_k results
+        top_idx = np.argsort(similarities)[-top_k:][::-1]
+        results = [row_data[i] for i in top_idx]
+        
+        print(f"✅ Found {len(results)} matching results")
+        return results
+        
+    except Exception as e:
+        print(f"❌ Error in query_rag: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 # CORS middleware
 app.add_middleware(
@@ -249,8 +299,20 @@ async def send_message_stream(chat_message: ChatMessage):
             )
             
             query = chat_message.message
+            
+            # Get relevant data from RAG
+            print(f"🔍 Searching for: {query}")
             top_rows = query_rag(query, top_k=10)
+            
+            if not top_rows:
+                error_msg = "I couldn't find any relevant data to answer your question. Please try rephrasing or ask about different data."
+                yield f"data: {json.dumps({'chat_id': chat_id, 'type': 'start'})}\n\n"
+                yield f"data: {json.dumps({'content': error_msg, 'type': 'chunk'})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'chat_id': chat_id})}\n\n"
+                return
+            
             context = "\n".join([str(r) for r in top_rows])
+            print(f"✅ Retrieved {len(top_rows)} relevant records")
             
             prompt = f"""
 You are a helpful AI banking assistant with expertise in analyzing customer data and financial patterns.
@@ -305,7 +367,11 @@ Let me analyze the data and provide a clear answer:
             yield f"data: {json.dumps({'type': 'done', 'chat_id': chat_id})}\n\n"
             
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            print(f"❌ Error in streaming: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            error_message = f"I encountered an error: {str(e)}. Please try again or rephrase your question."
+            yield f"data: {json.dumps({'type': 'error', 'error': error_message})}\n\n"
     
     return StreamingResponse(
         generate(),
@@ -390,7 +456,7 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     print("🚀 Server started successfully!")
-    print(f"📊 Loaded {len(embeddings)} embeddings")
+    print("📊 Using Supabase vector search for embeddings")
     print("✅ Ready to accept requests")
 
 @app.on_event("shutdown")
