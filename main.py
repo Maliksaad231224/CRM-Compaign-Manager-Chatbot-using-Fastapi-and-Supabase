@@ -7,93 +7,57 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
+from langchain_pinecone import PineconeVectorStore
+import os
+from dotenv import load_dotenv
 from supabase import create_client, Client
 import os
-from sentence_transformers import SentenceTransformer
+from langchain_huggingface import HuggingFaceEmbeddings
 import ast
 import numpy as np
 import openai
 import json
+from openai import OpenAI
+from pinecone import Pinecone
+from langchain_pinecone import PineconeVectorStore
 import asyncio
+from langchain_pinecone import PineconeVectorStore
 
-app = FastAPI(title="Bank Advisor API", version="1.0.0")
+app = FastAPI(title="Lead CRM API", version="1.0.0")
 load_dotenv()
-url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(url, key)
-table_name = "term_deposit_campaigns"
+index_name='crm-chatbot'
 
+# Initialize Pinecone
+PINECONE_API_KEY=os.getenv("PINECONE_API_KEY")
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+os.environ['PINECONE_API_KEY'] = PINECONE_API_KEY
 # Load sentence transformer model
-model = SentenceTransformer("all-MiniLM-L6-v2")
+embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+vectorstore = PineconeVectorStore.from_existing_index(
+        index_name=index_name,
+        embedding=embedding,
+       
+    )
+
 print('✅ Model loaded successfully')
 
 def query_rag(query, top_k=10):
     """
-    Query RAG using Supabase vector similarity search
+    Query RAG using Pinecone vector similarity search
     """
     try:
-        # Generate embedding for the query
-        query_embedding = model.encode(query).tolist()
+        retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": top_k})
         
-        # Try using Supabase's RPC function first
-        try:
-            response = supabase.rpc(
-                'match_documents',
-                {
-                    'query_embedding': query_embedding,
-                    'match_count': top_k
-                }
-            ).execute()
-            
-            if response.data:
-                return response.data
-        except Exception as rpc_error:
-            print(f"RPC function not available, using fallback method: {rpc_error}")
+        # Get relevant documents
+        docs = retriever.invoke(query)
         
-        # Fallback: Fetch all records and do similarity search manually
-        all_rows = supabase.table(table_name).select("*").execute().data
+        # Extract content from documents
+        results = [doc.page_content for doc in docs]
         
-        if not all_rows:
-            print("⚠️ No data found in table")
-            return []
-        
-        embeddings = []
-        row_data = []
-        
-        for row in all_rows:
-            emb_str = row.get("embedding_vector")
-            if emb_str:
-                try:
-                    # Handle both string and list formats
-                    if isinstance(emb_str, str):
-                        emb_list = ast.literal_eval(emb_str)
-                    else:
-                        emb_list = emb_str
-                    
-                    embeddings.append(np.array(emb_list, dtype=np.float32))
-                    row_data.append(row)
-                except Exception as e:
-                    print(f"Error parsing embedding for row: {e}")
-                    continue
-        
-        if len(embeddings) == 0:
-            print("⚠️ No valid embeddings found")
-            return []
-        
-        # Calculate cosine similarity
-        embeddings_matrix = np.vstack(embeddings)
-        query_emb = np.array(query_embedding, dtype=np.float32)
-        
-        # Normalize and compute similarity
-        embeddings_norm = embeddings_matrix / np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
-        query_norm = query_emb / np.linalg.norm(query_emb)
-        similarities = np.dot(embeddings_norm, query_norm)
-        
-        # Get top_k results
-        top_idx = np.argsort(similarities)[-top_k:][::-1]
-        results = [row_data[i] for i in top_idx]
-        
-        print(f"✅ Found {len(results)} matching results")
         return results
         
     except Exception as e:
@@ -148,12 +112,7 @@ async def read_root():
 
 @app.post("/api/chat/new")
 async def create_new_chat():
-    """
-    Create a new chat session
-    
-    Returns:
-        dict: New chat session ID
-    """
+
     chat_id = str(uuid.uuid4())
     chat_sessions[chat_id] = {
         "id": chat_id,
@@ -166,22 +125,7 @@ async def create_new_chat():
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def send_message(chat_message: ChatMessage):
-    """
-    Send a message and get AI response
-    
-    Args:
-        chat_message: User message and optional chat_id
-        
-    Returns:
-        ChatResponse: AI response with chat_id and timestamp
-        
-    TODO: Replace this mock response with your actual AI model integration
-    Examples:
-    - Integrate with OpenAI API
-    - Use local LLM (Ollama, LM Studio)
-    - Connect to your RAG pipeline
-    - Use Langchain for more complex workflows
-    """
+ 
     # Create new chat if chat_id not provided
     if not chat_message.chat_id or chat_message.chat_id not in chat_sessions:
         chat_id = str(uuid.uuid4())
@@ -215,7 +159,7 @@ async def send_message(chat_message: ChatMessage):
     context = "\n".join([str(r) for r in top_rows])
 
     prompt = f"""
-You are a helpful AI banking assistant with expertise in analyzing customer data and financial patterns.
+You are a helpful AI leads assistant with expertise in analyzing client, investors data 
 
 IMPORTANT INSTRUCTIONS:
 1. Answer ONLY using the information provided in the "Retrieved Data" below
@@ -421,22 +365,6 @@ async def get_chat(chat_id: str):
     
     return chat_sessions[chat_id]
 
-@app.delete("/api/chat/{chat_id}")
-async def delete_chat(chat_id: str):
-    """
-    Delete a chat session
-    
-    Args:
-        chat_id: Chat session ID
-        
-    Returns:
-        dict: Confirmation message
-    """
-    if chat_id not in chat_sessions:
-        raise HTTPException(status_code=404, detail="Chat not found")
-    
-    del chat_sessions[chat_id]
-    return {"message": "Chat deleted successfully"}
 
 @app.get("/api/health")
 async def health_check():
@@ -456,7 +384,7 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     print("🚀 Server started successfully!")
-    print("📊 Using Supabase vector search for embeddings")
+    print("📊 Using Pinecone vector search for embeddings")
     print("✅ Ready to accept requests")
 
 @app.on_event("shutdown")
@@ -467,6 +395,6 @@ async def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+        uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
     except KeyboardInterrupt:
         print("\n\n👋 Server stopped by user")
