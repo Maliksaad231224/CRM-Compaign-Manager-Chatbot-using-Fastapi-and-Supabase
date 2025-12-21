@@ -467,6 +467,6 @@ async def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+        uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
     except KeyboardInterrupt:
         print("\n\n👋 Server stopped by user")
