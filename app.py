@@ -16,7 +16,7 @@ import openai
 import json
 import asyncio
 
-app = FastAPI(title="Bank Advisor API", version="1.0.0")
+app = FastAPI(title="CRM Advisor API", version="1.0.0")
 load_dotenv()
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
