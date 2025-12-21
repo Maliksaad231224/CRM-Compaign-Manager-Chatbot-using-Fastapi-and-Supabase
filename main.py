@@ -41,8 +41,6 @@ embedding = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L
 vectorstore = PineconeVectorStore.from_existing_index(
         index_name=index_name,
         embedding=embedding,
-        
-       
     )
 
 print('✅ Model loaded successfully')
@@ -161,34 +159,19 @@ async def send_message(chat_message: ChatMessage):
     context = "\n".join([str(r) for r in top_rows])
 
     prompt = f"""
-You are an expert CRM data analyst with deep knowledge of customer relationship management, sales patterns, and business intelligence. Your role is to analyze customer data, identify trends, and provide actionable insights.
+You are a CRM assistant. Answer questions using the provided data.
 
-IMPORTANT INSTRUCTIONS:
-1. Answer using the information provided in the "Retrieved Data" below as your primary source
-2. ANALYZE and REASON about the data - don't just list records
-3. Identify patterns, trends, correlations, and insights from the data
-4. Provide business intelligence and actionable recommendations
-5. Compare and contrast different records when relevant
-6. Calculate metrics, percentages, or aggregations when appropriate
-7. Explain WHY certain patterns exist and WHAT they mean for business decisions
-8. Suggest next steps or strategies based on the data analysis
-9. Use markdown tables for structured data presentation
-10. For visualizations, use chart format: [CHART:type|labels:label1,label2|data:value1,value2] where type can be bar, line, pie, etc.
-11. If the data is insufficient, clearly state what's needed for better analysis
-12. Be specific with numbers, dates, and concrete details from the data
+INSTRUCTIONS:
+1. Use the "Retrieved Data" as your primary source
+2. Provide direct, concise answers
+3. Use markdown tables for structured data - include columns for: First Name, Last Name, Company, Email, Status, Company URL
+4. Keep responses brief and focused
 
 ### Retrieved Data:
 {context}
 
 ### User Question:
 {query}
-
-### Analysis & Reasoning:
-Provide a comprehensive analysis of the data, including:
-- Key insights and patterns identified
-- Business implications and recommendations
-- Any calculations or metrics derived from the data
-- Strategic suggestions based on your analysis
 
 ### Answer:
 """
@@ -271,34 +254,19 @@ async def send_message_stream(chat_message: ChatMessage):
             print(f"✅ Retrieved {len(top_rows)} relevant records")
             
             prompt = f"""
-You are an expert CRM data analyst with deep knowledge of customer relationship management, sales patterns, and business intelligence. Your role is to analyze customer data, identify trends, and provide actionable insights.
+You are a CRM assistant. Answer questions using the provided data.
 
-IMPORTANT INSTRUCTIONS:
-1. Answer using the information provided in the "Retrieved Data" below as your primary source
-2. ANALYZE and REASON about the data - don't just list records
-3. Identify patterns, trends, correlations, and insights from the data
-4. Provide business intelligence and actionable recommendations
-5. Compare and contrast different records when relevant
-6. Calculate metrics, percentages, or aggregations when appropriate
-7. Explain WHY certain patterns exist and WHAT they mean for business decisions
-8. Suggest next steps or strategies based on the data analysis
-9. Use markdown tables for structured data presentation
-10. For visualizations, use chart format: [CHART:type|labels:label1,label2|data:value1,value2] where type can be bar, line, pie, etc.
-11. If the data is insufficient, clearly state what's needed for better analysis
-12. Be specific with numbers, dates, and concrete details from the data
+INSTRUCTIONS:
+1. Use the "Retrieved Data" as your primary source
+2. Provide direct, concise answers
+3. Use markdown tables for structured data - include columns for: First Name, Last Name, Company, Email, Status, Company URL
+4. Keep responses brief and focused
 
 ### Retrieved Data:
 {context}
 
 ### User Question:
 {query}
-
-### Analysis & Reasoning:
-Provide a comprehensive analysis of the data, including:
-- Key insights and patterns identified
-- Business implications and recommendations
-- Any calculations or metrics derived from the data
-- Strategic suggestions based on your analysis
 
 ### Answer:
 """
