@@ -558,7 +558,7 @@ body {
     font-size: 15px;
     font-family: inherit;
     resize: none;
-    max-height: 200px;
+    max-height: 80px;
     line-height: 1.5;
 }
 
@@ -653,6 +653,16 @@ body {
     .input-area {
         padding: 16px;
     }
+}
+
+/* Chart Styles */
+.message canvas {
+    max-width: 100%;
+    height: auto;
+    margin: 10px 0;
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-primary);
 }
 
 @media (max-width: 480px) {

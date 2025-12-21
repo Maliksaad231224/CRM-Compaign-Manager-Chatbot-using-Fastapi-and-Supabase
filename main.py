@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from openai import OpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
@@ -16,7 +16,7 @@ import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import os
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 import ast
 import numpy as np
 import openai
@@ -36,10 +36,12 @@ PINECONE_API_KEY=os.getenv("PINECONE_API_KEY")
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 os.environ['PINECONE_API_KEY'] = PINECONE_API_KEY
 # Load sentence transformer model
-embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embedding = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
+    
 vectorstore = PineconeVectorStore.from_existing_index(
         index_name=index_name,
         embedding=embedding,
+        
        
     )
 
@@ -154,21 +156,26 @@ async def send_message(chat_message: ChatMessage):
     )
     
     query = chat_message.message
-    top_rows = query_rag(query, top_k=10)
+    top_rows = query_rag(query, top_k=5)
 
     context = "\n".join([str(r) for r in top_rows])
 
     prompt = f"""
-You are a helpful AI leads assistant with expertise in analyzing client, investors data 
+You are an expert CRM data analyst with deep knowledge of customer relationship management, sales patterns, and business intelligence. Your role is to analyze customer data, identify trends, and provide actionable insights.
 
 IMPORTANT INSTRUCTIONS:
-1. Answer ONLY using the information provided in the "Retrieved Data" below
-2. If the data doesn't contain enough information to answer fully, clearly state what's missing
-3. Do NOT make assumptions or use outside knowledge
-4. Provide specific details from the data (numbers, names, amounts, etc.)
-5. If comparing or analyzing multiple records, structure your answer clearly
-6. Be concise but thorough in your explanations
-7. When relevant, explain patterns or insights you notice in the data
+1. Answer using the information provided in the "Retrieved Data" below as your primary source
+2. ANALYZE and REASON about the data - don't just list records
+3. Identify patterns, trends, correlations, and insights from the data
+4. Provide business intelligence and actionable recommendations
+5. Compare and contrast different records when relevant
+6. Calculate metrics, percentages, or aggregations when appropriate
+7. Explain WHY certain patterns exist and WHAT they mean for business decisions
+8. Suggest next steps or strategies based on the data analysis
+9. Use markdown tables for structured data presentation
+10. For visualizations, use chart format: [CHART:type|labels:label1,label2|data:value1,value2] where type can be bar, line, pie, etc.
+11. If the data is insufficient, clearly state what's needed for better analysis
+12. Be specific with numbers, dates, and concrete details from the data
 
 ### Retrieved Data:
 {context}
@@ -176,8 +183,14 @@ IMPORTANT INSTRUCTIONS:
 ### User Question:
 {query}
 
+### Analysis & Reasoning:
+Provide a comprehensive analysis of the data, including:
+- Key insights and patterns identified
+- Business implications and recommendations
+- Any calculations or metrics derived from the data
+- Strategic suggestions based on your analysis
+
 ### Answer:
-Let me analyze the data and provide a clear answer:
 """
 
     response = client.chat.completions.create(
@@ -243,10 +256,9 @@ async def send_message_stream(chat_message: ChatMessage):
             )
             
             query = chat_message.message
-            
-            # Get relevant data from RAG
+        
             print(f"🔍 Searching for: {query}")
-            top_rows = query_rag(query, top_k=10)
+            top_rows = query_rag(query, top_k=5)
             
             if not top_rows:
                 error_msg = "I couldn't find any relevant data to answer your question. Please try rephrasing or ask about different data."
@@ -259,16 +271,21 @@ async def send_message_stream(chat_message: ChatMessage):
             print(f"✅ Retrieved {len(top_rows)} relevant records")
             
             prompt = f"""
-You are a helpful AI banking assistant with expertise in analyzing customer data and financial patterns.
+You are an expert CRM data analyst with deep knowledge of customer relationship management, sales patterns, and business intelligence. Your role is to analyze customer data, identify trends, and provide actionable insights.
 
 IMPORTANT INSTRUCTIONS:
-1. Answer ONLY using the information provided in the "Retrieved Data" below
-2. If the data doesn't contain enough information to answer fully, clearly state what's missing
-3. Do NOT make assumptions or use outside knowledge
-4. Provide specific details from the data (numbers, names, amounts, etc.)
-5. If comparing or analyzing multiple records, structure your answer clearly
-6. Be concise but thorough in your explanations
-7. When relevant, explain patterns or insights you notice in the data
+1. Answer using the information provided in the "Retrieved Data" below as your primary source
+2. ANALYZE and REASON about the data - don't just list records
+3. Identify patterns, trends, correlations, and insights from the data
+4. Provide business intelligence and actionable recommendations
+5. Compare and contrast different records when relevant
+6. Calculate metrics, percentages, or aggregations when appropriate
+7. Explain WHY certain patterns exist and WHAT they mean for business decisions
+8. Suggest next steps or strategies based on the data analysis
+9. Use markdown tables for structured data presentation
+10. For visualizations, use chart format: [CHART:type|labels:label1,label2|data:value1,value2] where type can be bar, line, pie, etc.
+11. If the data is insufficient, clearly state what's needed for better analysis
+12. Be specific with numbers, dates, and concrete details from the data
 
 ### Retrieved Data:
 {context}
@@ -276,8 +293,14 @@ IMPORTANT INSTRUCTIONS:
 ### User Question:
 {query}
 
+### Analysis & Reasoning:
+Provide a comprehensive analysis of the data, including:
+- Key insights and patterns identified
+- Business implications and recommendations
+- Any calculations or metrics derived from the data
+- Strategic suggestions based on your analysis
+
 ### Answer:
-Let me analyze the data and provide a clear answer:
 """
             
             # Send chat_id first

@@ -33,7 +33,7 @@ function toggleTheme() {
 // Auto-resize textarea
 function autoResizeTextarea() {
     messageInput.style.height = 'auto';
-    messageInput.style.height = Math.min(messageInput.scrollHeight, 200) + 'px';
+    messageInput.style.height = Math.min(messageInput.scrollHeight, 80) + 'px';
 }
 
 // Format timestamp
@@ -122,6 +122,11 @@ function formatMessage(text) {
                .replace(/</g, '&lt;')
                .replace(/>/g, '&gt;');
     
+    // Detect and render charts
+    text = text.replace(/\[CHART:(\w+)\|labels:([^|]+)\|data:([^|]+)\]/g, function(match, type, labels, data) {
+        return createChartElement(type, labels.split(','), data.split(','));
+    });
+    
     // Detect and format tables (markdown style)
     text = text.replace(/(\|.+\|[\r\n]+\|[-:\s|]+\|[\r\n]+(?:\|.+\|[\r\n]*)+)/g, function(match) {
         return convertMarkdownTableToHTML(match);
@@ -177,6 +182,38 @@ function convertMarkdownTableToHTML(markdown) {
     html += '</tbody></table></div>';
     
     return html;
+}
+
+function createChartElement(type, labels, data) {
+    const chartId = 'chart-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    const canvas = document.createElement('canvas');
+    canvas.id = chartId;
+    canvas.width = 400;
+    canvas.height = 200;
+    
+    // Use setTimeout to ensure the canvas is in the DOM before creating the chart
+    setTimeout(() => {
+        const ctx = document.getElementById(chartId).getContext('2d');
+        new Chart(ctx, {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Data',
+                    data: data.map(d => parseFloat(d.trim())),
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    }, 100);
+    
+    return canvas.outerHTML;
 }
 
 // Detect and format JSON as table
