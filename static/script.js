@@ -408,7 +408,7 @@ async function handleSubmit(e) {
     
     const header = document.createElement('div');
     header.className = 'message-header';
-    header.innerHTML = '<span class="message-author">Bank Advisor</span><span class="message-time">Just now</span>';
+    header.innerHTML = '<span class="message-author">CRM Advisor</span><span class="message-time">Just now</span>';
     
     const text = document.createElement('div');
     text.className = 'message-text';
@@ -477,11 +477,11 @@ async function handleNewChat() {
             <div class="message-avatar">BA</div>
             <div class="message-content">
                 <div class="message-header">
-                    <span class="message-author">Bank Advisor</span>
+                    <span class="message-author">CRM Advisor</span>
                     <span class="message-time">Just now</span>
                 </div>
                 <div class="message-text">
-                    <p>👋 Welcome! I'm your Bank Advisor. I can help you analyze customer data, identify patterns, and answer questions about your banking information. What would you like to know?</p>
+                    <p>👋 Welcome! I'm your CRM Advisor. I can help you analyze customer data, identify patterns, and answer questions about your campaign information. What would you like to know?</p>
                 </div>
             </div>
         </div>
